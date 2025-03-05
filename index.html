@@ -82,7 +82,7 @@
 
             // Create camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 15);
+            camera.position.set(0, 0, 20); // Move camera back for a bigger view
             camera.lookAt(0, 0, 0);
 
             // Create renderer
@@ -124,14 +124,17 @@
             window.addEventListener('resize', onWindowResize);
             document.getElementById('dropButton').addEventListener('click', dropChip);
             document.getElementById('resetButton').addEventListener('click', resetScore);
+            
+            // Handle window resize for slot labels
+            window.addEventListener('resize', updateSlotLabelPositions);
 
             // Start animation loop
             animate();
         }
 
         function createBoard() {
-            // Create a backboard
-            const boardGeometry = new THREE.BoxGeometry(12, 14, 0.5);
+            // Create a backboard - make it bigger
+            const boardGeometry = new THREE.BoxGeometry(18, 20, 0.5);
             const boardMaterial = new THREE.MeshStandardMaterial({ 
                 color: 0x8B4513,
                 roughness: 0.7,
@@ -142,27 +145,27 @@
             board.receiveShadow = true;
             scene.add(board);
 
-            // Create board walls
+            // Create board walls - make them bigger
             const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
             
             // Left wall
             const leftWall = new THREE.Mesh(
-                new THREE.BoxGeometry(0.5, 14, 1),
+                new THREE.BoxGeometry(0.5, 20, 1),
                 wallMaterial
             );
-            leftWall.position.set(-6, 0, 0);
+            leftWall.position.set(-9, 0, 0);
             scene.add(leftWall);
             
             // Right wall
             const rightWall = new THREE.Mesh(
-                new THREE.BoxGeometry(0.5, 14, 1),
+                new THREE.BoxGeometry(0.5, 20, 1),
                 wallMaterial
             );
-            rightWall.position.set(6, 0, 0);
+            rightWall.position.set(9, 0, 0);
             scene.add(rightWall);
 
-            // Add physics for walls
-            const wallShape = new CANNON.Box(new CANNON.Vec3(0.25, 7, 0.5));
+            // Add physics for walls - make them bigger
+            const wallShape = new CANNON.Box(new CANNON.Vec3(0.25, 10, 0.5));
             const wallMat = new CANNON.Material({
                 friction: 0.1,
                 restitution: 0.3
@@ -170,30 +173,47 @@
             
             const leftWallBody = new CANNON.Body({ mass: 0, material: wallMat });
             leftWallBody.addShape(wallShape);
-            leftWallBody.position.set(-6, 0, 0);
+            leftWallBody.position.set(-9, 0, 0);
             world.addBody(leftWallBody);
             
             const rightWallBody = new CANNON.Body({ mass: 0, material: wallMat });
             rightWallBody.addShape(wallShape);
-            rightWallBody.position.set(6, 0, 0);
+            rightWallBody.position.set(9, 0, 0);
             world.addBody(rightWallBody);
+            
+            // Add a back wall to prevent chips from falling behind
+            const backWallBody = new CANNON.Body({ mass: 0 });
+            const backWallShape = new CANNON.Box(new CANNON.Vec3(9, 10, 0.1));
+            backWallBody.addShape(backWallShape);
+            backWallBody.position.set(0, 0, -0.6);
+            world.addBody(backWallBody);
+            
+            // Add a front constraint plane to keep chips from coming forward
+            const frontConstraint = new CANNON.Body({ mass: 0 });
+            const frontShape = new CANNON.Box(new CANNON.Vec3(9, 10, 0.1));
+            frontConstraint.addShape(frontShape);
+            frontConstraint.position.set(0, 0, 0.6);
+            world.addBody(frontConstraint);
         }
 
         function createPegs() {
-            const pegGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.5, 16);
+            const pegGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.5, 16); // Slightly bigger pegs
             const pegMaterial = new THREE.MeshStandardMaterial({ 
                 color: 0xCCCCCC,
                 metalness: 0.8,
                 roughness: 0.2
             });
 
-            // Peg arrangement in rows
+            // Peg arrangement in rows - more rows and more pegs per row
             const rows = [
-                { y: 5, count: 1, xOffset: 0 },
-                { y: 3, count: 2, xOffset: 2 },
-                { y: 1, count: 3, xOffset: 2 },
-                { y: -1, count: 4, xOffset: 2 },
-                { y: -3, count: 5, xOffset: 2 }
+                { y: 8, count: 1, xOffset: 0 },
+                { y: 6, count: 2, xOffset: 3 },
+                { y: 4, count: 3, xOffset: 3 },
+                { y: 2, count: 4, xOffset: 3 },
+                { y: 0, count: 5, xOffset: 3 },
+                { y: -2, count: 6, xOffset: 3 },
+                { y: -4, count: 7, xOffset: 2.5 },
+                { y: -6, count: 8, xOffset: 2.2 }
             ];
 
             rows.forEach(row => {
@@ -210,7 +230,7 @@
                     pegs.push(peg);
 
                     // Create physics body for peg
-                    const pegShape = new CANNON.Cylinder(0.3, 0.3, 0.5, 16);
+                    const pegShape = new CANNON.Cylinder(0.4, 0.4, 0.5, 16); // Match the visual size
                     const pegBody = new CANNON.Body({ 
                         mass: 0, // Static body
                         material: new CANNON.Material({
@@ -228,7 +248,7 @@
         }
 
         function createSlots() {
-            const slotWidth = 2;
+            const slotWidth = 3; // Wider slots
             const slotDepth = 1;
             const slotHeight = 0.5;
             const totalSlots = 6;
@@ -243,6 +263,9 @@
                 0xFF0000  // Red - 100
             ];
 
+            // Create slot boundaries for collision detection
+            const slotBoundaries = [];
+            
             for (let i = 0; i < totalSlots; i++) {
                 const x = (i * slotWidth) - ((totalSlots - 1) * slotWidth / 2);
                 
@@ -255,32 +278,64 @@
                 });
                 
                 const slot = new THREE.Mesh(slotGeometry, slotMaterial);
-                slot.position.set(x, -6, 0);
-                slot.userData = { score: slotScores[i] };
+                slot.position.set(x, -9, 0); // Lower position for bigger board
+                slot.userData = { score: slotScores[i], index: i };
                 scene.add(slot);
                 slotMeshes.push(slot);
 
                 // Add score text above each slot
                 const scoreDiv = document.createElement('div');
                 scoreDiv.className = 'slot-label';
+                scoreDiv.id = 'slot-label-' + i;
                 scoreDiv.innerHTML = slotScores[i];
-                scoreDiv.style.width = '40px';
-                scoreDiv.style.left = (window.innerWidth / 2) + (x * 40) - 20 + 'px';
-                scoreDiv.style.top = (window.innerHeight / 2) + 180 + 'px';
+                scoreDiv.style.width = '60px'; // Wider labels
+                scoreDiv.style.fontSize = '18px'; // Bigger font
+                scoreDiv.style.left = (window.innerWidth / 2) + (x * 40) - 30 + 'px';
+                scoreDiv.style.top = (window.innerHeight / 2) + 270 + 'px'; // Adjusted position
                 document.body.appendChild(scoreDiv);
+                
+                // Store slot boundaries for collision detection
+                slotBoundaries.push({
+                    minX: x - slotWidth/2,
+                    maxX: x + slotWidth/2,
+                    score: slotScores[i],
+                    index: i
+                });
+                
+                // Add invisible walls between slots to guide chips
+                if (i < totalSlots - 1) {
+                    const dividerX = x + slotWidth/2;
+                    const dividerBody = new CANNON.Body({ mass: 0 });
+                    const dividerShape = new CANNON.Box(new CANNON.Vec3(0.05, 0.5, 0.5));
+                    dividerBody.addShape(dividerShape);
+                    dividerBody.position.set(dividerX, -9, 0); // Adjusted position
+                    world.addBody(dividerBody);
+                }
             }
 
             // Create a bottom barrier to catch the chips
-            const barrierShape = new CANNON.Box(new CANNON.Vec3(6, 0.25, 0.5));
-            const barrierBody = new CANNON.Body({ mass: 0 });
+            const barrierShape = new CANNON.Box(new CANNON.Vec3(9, 0.25, 0.5)); // Wider barrier
+            const barrierBody = new CANNON.Body({ 
+                mass: 0,
+                collisionResponse: true
+            });
             barrierBody.addShape(barrierShape);
-            barrierBody.position.set(0, -7, 0);
+            barrierBody.position.set(0, -10, 0); // Lower position
+            
+            // Add a callback for when chips hit the bottom barrier
+            barrierBody.addEventListener("collide", function(e) {
+                const chipBody = e.body;
+                if (chipBody && chipBody.userData && !chipBody.userData.scored) {
+                    scoreChip(chipBody);
+                }
+            });
+            
             world.addBody(barrierBody);
         }
 
         function createChip() {
             // Create visual chip
-            const chipGeometry = new THREE.SphereGeometry(0.4, 32, 32);
+            const chipGeometry = new THREE.SphereGeometry(0.5, 32, 32); // Slightly bigger chips
             const chipMaterial = new THREE.MeshStandardMaterial({ 
                 color: Math.random() * 0xffffff, // Random color for each chip
                 metalness: 0.3,
@@ -291,13 +346,13 @@
             newChip.castShadow = true;
             
             // Add small random offset to x position for variability
-            const xOffset = (Math.random() - 0.5) * 2; // Increased range for more variability
-            newChip.position.set(xOffset, 6, 0);
+            const xOffset = (Math.random() - 0.5) * 3; // Increased range for more variability
+            newChip.position.set(xOffset, 9, 0); // Higher starting position
             scene.add(newChip);
             chips.push(newChip);
 
             // Create physics body for chip
-            const chipShape = new CANNON.Sphere(0.4);
+            const chipShape = new CANNON.Sphere(0.5); // Match the visual size
             const chipMat = new CANNON.Material({
                 friction: 0.2,
                 restitution: 0.5 // Slightly bouncy
@@ -314,14 +369,25 @@
             });
             
             newChipBody.addShape(chipShape);
-            newChipBody.position.set(xOffset, 6, 0);
+            newChipBody.position.set(xOffset, 9, 0); // Higher starting position
             
             // Add initial velocity variation
             newChipBody.velocity.set(
-                (Math.random() - 0.5) * 1, // Increased random x velocity
-                -1,                         // Increased initial downward velocity
+                (Math.random() - 0.5) * 1.5, // Increased random x velocity
+                -1.5,                         // Increased initial downward velocity
                 0
             );
+            
+            // Constrain the chip to the z-axis to prevent it from moving too far forward or backward
+            newChipBody.addEventListener("collide", function(e) {
+                // Reset z velocity on collision to prevent z-axis movement
+                newChipBody.velocity.z *= 0.5;
+                
+                // Keep z position close to 0
+                if (Math.abs(newChipBody.position.z) > 0.3) {
+                    newChipBody.position.z *= 0.5;
+                }
+            });
             
             // Add a unique ID to track this chip
             const chipId = Date.now() + Math.random();
@@ -363,11 +429,9 @@
         }
 
         function dropChip() {
-            // Limit the number of active chips to prevent performance issues
-            if (activeChips < 15) {
-                createChip();
-                document.getElementById('lastScore').textContent = "";
-            }
+            // Allow unlimited chip dropping - remove the limit
+            createChip();
+            document.getElementById('lastScore').textContent = "";
         }
 
         function resetScore() {
@@ -381,32 +445,77 @@
             if (stoppedChipBody.userData && !stoppedChipBody.userData.scored && 
                 stoppedChipBody.sleepState === CANNON.Body.SLEEPING) {
                 
-                const x = stoppedChipBody.position.x;
                 const y = stoppedChipBody.position.y;
                 
                 // Only score if the chip is near the bottom (in a slot)
                 if (y < -5.5) {
-                    const slotIndex = Math.floor((x + 6) / 2);
-                    
-                    // Ensure slot index is within bounds
-                    const validSlotIndex = Math.max(0, Math.min(slotScores.length - 1, slotIndex));
-                    const score = slotScores[validSlotIndex];
-                    
-                    totalScore += score;
-                    document.getElementById('scoreDisplay').textContent = "Total Score: " + totalScore;
-                    document.getElementById('lastScore').textContent = "Last drop: " + score + " points!";
-                    
-                    // Add particle effect for fun
-                    createParticles(stoppedChipBody.position.x, stoppedChipBody.position.y, stoppedChipBody.position.z);
-                    
-                    // Mark this chip as scored so we don't count it again
-                    stoppedChipBody.userData.scored = true;
-                    
-                    activeChips--;
-                    
-                    // Clean up old chips to prevent memory issues
-                    cleanupOldChips();
+                    scoreChip(stoppedChipBody);
                 }
+            }
+        }
+        
+        // Function to score a chip
+        function scoreChip(chipBody) {
+            if (chipBody.userData && !chipBody.userData.scored) {
+                const x = chipBody.position.x;
+                
+                // Calculate which slot the chip is in
+                let slotIndex = Math.floor((x + 9) / 3); // Adjusted for wider slots and board
+                
+                // Ensure slot index is within bounds
+                slotIndex = Math.max(0, Math.min(slotScores.length - 1, slotIndex));
+                const score = slotScores[slotIndex];
+                
+                // Update the score
+                totalScore += score;
+                document.getElementById('scoreDisplay').textContent = "Total Score: " + totalScore;
+                document.getElementById('lastScore').textContent = "Last drop: " + score + " points!";
+                
+                // Add particle effect for fun
+                createParticles(chipBody.position.x, chipBody.position.y, chipBody.position.z);
+                
+                // Mark this chip as scored so we don't count it again
+                chipBody.userData.scored = true;
+                
+                // Flash the slot that was hit
+                flashSlot(slotIndex);
+                
+                activeChips--;
+                
+                // Find the corresponding visual chip and remove it after scoring
+                for (let i = 0; i < chipBodies.length; i++) {
+                    if (chipBodies[i] === chipBody) {
+                        // Remove the chip from the scene after a short delay
+                        setTimeout(() => {
+                            if (i < chips.length) {
+                                scene.remove(chips[i]);
+                                world.remove(chipBodies[i]);
+                                chips.splice(i, 1);
+                                chipBodies.splice(i, 1);
+                            }
+                        }, 500); // Short delay to allow particles to show
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Function to flash a slot when it's hit
+        function flashSlot(slotIndex) {
+            if (slotIndex >= 0 && slotIndex < slotMeshes.length) {
+                const slot = slotMeshes[slotIndex];
+                const originalColor = slot.material.color.getHex();
+                const originalOpacity = slot.material.opacity;
+                
+                // Flash white with higher opacity
+                slot.material.color.set(0xFFFFFF);
+                slot.material.opacity = 1.0;
+                
+                // Return to original color after 300ms
+                setTimeout(() => {
+                    slot.material.color.setHex(originalColor);
+                    slot.material.opacity = originalOpacity;
+                }, 300);
             }
         }
         
@@ -426,7 +535,7 @@
         }
 
         function createParticles(x, y, z) {
-            const particleCount = 20;
+            const particleCount = 30; // Increased particle count
             const particleGroup = new THREE.Group();
             scene.add(particleGroup);
             
@@ -442,11 +551,11 @@
                 particle.position.set(x, y, z);
                 particle.userData = {
                     velocity: new THREE.Vector3(
-                        (Math.random() - 0.5) * 0.3,
-                        Math.random() * 0.2,
-                        (Math.random() - 0.5) * 0.3
+                        (Math.random() - 0.5) * 0.5, // Increased spread
+                        Math.random() * 0.3,         // Increased upward velocity
+                        (Math.random() - 0.5) * 0.5  // Increased spread
                     ),
-                    life: 30
+                    life: 40 // Increased life for longer effect
                 };
                 
                 particleGroup.add(particle);
@@ -461,7 +570,7 @@
                         particle.position.add(particle.userData.velocity);
                         particle.userData.velocity.y -= 0.01; // Gravity effect
                         particle.userData.life--;
-                        particle.material.opacity = particle.userData.life / 30;
+                        particle.material.opacity = particle.userData.life / 40;
                         hasActiveParticles = true;
                     }
                 });
@@ -493,10 +602,42 @@
                 if (i < chipBodies.length) {
                     chips[i].position.copy(chipBodies[i].position);
                     chips[i].quaternion.copy(chipBodies[i].quaternion);
+                    
+                    // Check if any chip has fallen too far behind the board
+                    if (Math.abs(chipBodies[i].position.z) > 0.6) {
+                        // Reset z position to prevent falling behind or in front
+                        chipBodies[i].position.z = 0;
+                        chipBodies[i].velocity.z = 0;
+                    }
+                    
+                    // Check if any chip has fallen off the board
+                    if (chipBodies[i].position.y < -10) {
+                        // Remove chips that fall too far down
+                        scene.remove(chips[i]);
+                        world.remove(chipBodies[i]);
+                        chips.splice(i, 1);
+                        chipBodies.splice(i, 1);
+                        i--;
+                    }
                 }
             }
             
             renderer.render(scene, camera);
+        }
+
+        // Function to update slot label positions on window resize
+        function updateSlotLabelPositions() {
+            const slotWidth = 3; // Match the wider slots
+            const totalSlots = 6;
+            
+            for (let i = 0; i < totalSlots; i++) {
+                const x = (i * slotWidth) - ((totalSlots - 1) * slotWidth / 2);
+                const label = document.getElementById('slot-label-' + i);
+                if (label) {
+                    label.style.left = (window.innerWidth / 2) + (x * 40) - 30 + 'px';
+                    label.style.top = (window.innerHeight / 2) + 270 + 'px'; // Adjusted position
+                }
+            }
         }
 
         // Initialize the game when page loads
